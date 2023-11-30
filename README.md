@@ -9,5 +9,5 @@
 ## lab4 Driver (Part II)
 -Be familiar with designing a driver.
 ## lab5 Task
-- Be familiar with system calls: fork(), wait(), waitpid(), etc.
+-Be familiar with system calls: fork(), wait(), waitpid(), etc.
 -Be familiar with POSIX programming: pthread_create(), pthread_exit(),etc.
