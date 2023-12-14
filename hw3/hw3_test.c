@@ -27,17 +27,18 @@ int delivery_shmid;
 struct total_result *result_shm;
 int *delivery_shm;
 
-
 /*-------------------*/
 
-
+/*Semaphore*/ 
 #define SEM_MODE 0666 /* rw(owner)-rw(group)-rw(other) permission */
 #define MAX_BUFFER_SIZE 256
 #define SEM_KEY 428361733 /* any long int */
 #define SEM_VAL 1
+int s;
+/*-------------------*/
 
-/*Global variable*/
-// global for shop and order
+
+/*global for shop and order*/ 
 int total_cookie = 0;
 int total_cake = 0;
 int total_tea = 0;
@@ -47,137 +48,32 @@ int total_egg_drop_soup = 0;
 int total_price = 0;
 char initial_shop[50] = {0};
 int distance = 0;
+/*-------------------*/
 
-// global variable
+/*socket and fork*/ 
 int server_fd, client_socket;
-//for Semophore
-int s;
-//for mutex
+int origin_parent;
+/*-------------------*/
+
+/*mutex*/ 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 int rc = 0;
+/*-------------------*/
 
-/*--------------------------------------*/
-
-void stop_child(int signum) {
-    // waitpid 是為了等待並處理子進程的結束，以防止它們變成殭屍進程。
-    while (waitpid(-1, NULL, WNOHANG) > 0);
-}
-
-// use to define my sigint
-void safe_close_routine(int signum) {
-    
-    close(server_fd);
-
-    /* remove semaphore */
-    if (semctl(s, 0, IPC_RMID, 0) < 0)
-    {
-        fprintf(stderr, "unable to remove semaphore %d\n",
-                SEM_KEY);
-        exit(1);
-    }
-    /*---------------------------------*/ 
-
-    /* destroy mutex */
-    pthread_mutex_destroy(&mutex);
-    printf("Main thread cleans up mutex\n");
-    /*---------------------------------*/ 
-
-
-    /* create result.txt*/
-    // 定義檔案指標
-    FILE *filePointer;
-
-    // 開啟檔案以進行寫入，如果檔案不存在則會被創建
-    // 如果檔案存在，則會清空檔案內容
-    filePointer = fopen("result.txt", "w");
-
-    // 檢查檔案是否成功開啟
-    if (filePointer == NULL) {
-        printf("無法創建或開啟檔案。\n");
-        exit(1); // 結束程式，返回錯誤碼
-    }
-
-    // 將資料寫入檔案
-    fprintf(filePointer, "%s: %d\n%s: %d$", result_shm[0].heading, result_shm[0].amount, result_shm[1].heading, result_shm[1].amount);
-
-    // 關閉檔案
-    fclose(filePointer);
-
-    printf("檔案已成功創建或清空並寫入。\n");
-    /*---------------------------------------*/
-
-    /*remove delivery shm*/
-    /* Detach the shared memory segment */
-    shmdt(delivery_shm);    
-    int retval;
-    retval = shmctl(delivery_shmid, IPC_RMID, NULL);
-    if (retval < 0) {
-        fprintf(stderr, "Server removes delivery shared memory failed\n");
-        exit(1);
-    }
-
-    /*remove result shm*/
-    /* Detach the shared memory segment */
-    shmdt(result_shm);    
-    retval = shmctl(result_shmid, IPC_RMID, NULL);
-    if (retval < 0) {
-        fprintf(stderr, "Server removes result shared memory failed\n");
-        exit(1);
-    }
-
-    printf("Semaphore %d has been removed\n", SEM_KEY);
-    exit(signum);            // 結束程式
-}
-
-/* P () - returns 0 if OK; -1 if there was a problem */
-int P(int s)
-{
-    struct sembuf sop; /* the operation parameters */
-    sop.sem_num = 0;   /* access the 1st (and only) sem in the array */
-    sop.sem_op = -1;   /* wait..*/
-    sop.sem_flg = 0;   /* no special options needed */
-
-    if (semop(s, &sop, 1) < 0)
-    {
-        fprintf(stderr, "P(): semop failed: %s\n", strerror(errno));
-        return -1;
-    }
-    else
-    {
-        return 0;
-    }
-}
-
-/* V() - returns 0 if OK; -1 if there was a problem */
-int V(int s)
-{
-    struct sembuf sop; /* the operation parameters */
-    sop.sem_num = 0;   /* the 1st (and only) sem in the array */
-    sop.sem_op = 1;    /* signal */
-    sop.sem_flg = 0;   /* no special options needed */
-
-    if (semop(s, &sop, 1) < 0)
-    {
-        fprintf(stderr, "V(): semop failed: %s\n", strerror(errno));
-        return -1;
-    }
-    else
-    {
-        return 0;
-    }
-}
-
-
-
-// 函數原型
+/*function*/ 
 void handleClient(void* arg);
 const char *get_shop_name(const char *item_name);
 void update_num_price(const char *item_name, const int quantity);
 char *show_current_order();
 void reset_order();
+void stop_child(int signum);
+void safe_close_routine(int signum);
+int P(int s);
+int V(int s);
 void counting_time_CS();
 int schedule_and_wait(int dis);
 bool check_wating_time();
+/*-------------------*/
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {
@@ -259,7 +155,7 @@ int main(int argc, char *argv[]) {
     if (childpid >= 0) {
         if (childpid > 0) {
             // Parent process
-            printf("i am in parent process!!!!\n");
+            origin_parent = (int)getpid();
             counting_time_CS();
         } 
         else {
@@ -319,11 +215,6 @@ int main(int argc, char *argv[]) {
         perror("fork");
         exit(EXIT_FAILURE);
     }
-
-
-
-
-
 
     // 因為while(1)過不來
     // // 關閉伺服器端 socket
@@ -537,7 +428,6 @@ char *show_current_order(){
     return order_history;  
 }
 
-
 void reset_order(){
     total_cookie = 0;
     total_cake = 0;
@@ -548,6 +438,124 @@ void reset_order(){
     total_price = 0;
     distance = 0;
 
+}
+
+void stop_child(int signum) {
+    // waitpid 是為了等待並處理子進程的結束，以防止它們變成殭屍進程。
+    while (waitpid(-1, NULL, WNOHANG) > 0);
+}
+
+// use to define my sigint
+void safe_close_routine(int signum) {
+    
+    close(server_fd);
+
+    
+    if(origin_parent == (int)getpid()){
+        /* remove semaphore */
+       if (semctl(s, 0, IPC_RMID, 0) < 0)
+        {
+            fprintf(stderr, "unable to remove semaphore %d\n",
+                    SEM_KEY);
+            exit(1);
+        } 
+        /*---------------------------------*/ 
+        
+        /* create result.txt*/
+        // 定義檔案指標
+        FILE *filePointer;
+
+        // 開啟檔案以進行寫入，如果檔案不存在則會被創建
+        // 如果檔案存在，則會清空檔案內容
+        filePointer = fopen("result.txt", "w");
+
+        // 檢查檔案是否成功開啟
+        if (filePointer == NULL) {
+            printf("無法創建或開啟檔案。\n");
+            exit(1); // 結束程式，返回錯誤碼
+        }
+
+        // 將資料寫入檔案
+        fprintf(filePointer, "%s: %d\n%s: %d$", result_shm[0].heading, result_shm[0].amount, result_shm[1].heading, result_shm[1].amount);
+
+        // 關閉檔案
+        fclose(filePointer);
+
+        printf("檔案已成功創建或清空並寫入。\n");
+        /*---------------------------------------*/
+
+
+    }      
+    
+
+    /* destroy mutex */
+    pthread_mutex_destroy(&mutex);
+    /*---------------------------------*/ 
+
+    /* Detach the shared memory segment of delivery and  result*/
+    shmdt(delivery_shm);
+    shmdt(result_shm); 
+
+
+    if(origin_parent == (int)getpid()){
+        /*remove share memory*/
+        /*remove delivery shm*/
+        int retval;
+        retval = shmctl(delivery_shmid, IPC_RMID, NULL);
+        if (retval < 0) {
+            fprintf(stderr, "Server removes delivery shared memory failed\n");
+            exit(1);
+        }
+
+        /*remove result shm*/
+        retval = shmctl(result_shmid, IPC_RMID, NULL);
+        if (retval < 0) {
+            fprintf(stderr, "Server removes result shared memory failed\n");
+            exit(1);
+        }
+        /*------------------------------*/
+    }
+
+    // 結束程式
+    exit(signum);            
+}
+
+/* P () - returns 0 if OK; -1 if there was a problem */
+int P(int s)
+{
+    struct sembuf sop; /* the operation parameters */
+    sop.sem_num = 0;   /* access the 1st (and only) sem in the array */
+    sop.sem_op = -1;   /* wait..*/
+    sop.sem_flg = 0;   /* no special options needed */
+
+    if (semop(s, &sop, 1) < 0)
+    {
+        fprintf(stderr, "P(): semop failed: %s\n", strerror(errno));
+        return -1;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+/* V() - returns 0 if OK; -1 if there was a problem */
+int V(int s)
+{
+    struct sembuf sop; /* the operation parameters */
+    sop.sem_num = 0;   /* the 1st (and only) sem in the array */
+    sop.sem_op = 1;    /* signal */
+    sop.sem_flg = 0;   /* no special options needed */
+
+    if (semop(s, &sop, 1) < 0)
+    {
+        fprintf(stderr, "V(): semop failed: %s\n", strerror(errno));
+        return -1;
+    }
+    else
+    {
+        return 0;
+    }
 }
 
 void counting_time_CS(){
