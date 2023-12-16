@@ -12,9 +12,9 @@
 ### lab5 Task
 - Be familiar with system calls: fork(), wait(), waitpid(), etc.
 - Be familiar with POSIX programming: pthread_create(), pthread_exit(),etc.
-### lab6 Task
+### lab6 Inter-Process Communication
 - Be familiar with inter-process communication: semaphore, mutex, etc.
-### lab7 Task
+### lab7 Signal & Timer
 - Be familiar with signal, timer and process reaper.
 
 ## HW
