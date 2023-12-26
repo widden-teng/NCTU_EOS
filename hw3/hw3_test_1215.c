@@ -48,6 +48,7 @@ int total_egg_drop_soup = 0;
 int total_price = 0;
 char initial_shop[50] = {0};
 int distance = 0;
+bool first_order = true;
 /*-------------------*/
 
 /*socket and fork*/ 
@@ -72,7 +73,7 @@ int P(int s);
 int V(int s);
 void counting_time_CS();
 int schedule_and_wait(int dis);
-bool check_wating_time();
+// bool check_wating_time();
 /*-------------------*/
 
 int main(int argc, char *argv[]) {
@@ -232,13 +233,13 @@ void handleClient(void* arg){
         char response[MAX_BUFFER_SIZE] = {0};
         char buffer[MAX_BUFFER_SIZE] = {0};
         char current_shop[50];
-        bool first_order = true;
         char *item_name;  
 
         while (1)
         {
             memset(response, 0, sizeof(response));
             read(client_sockfd, buffer, sizeof(buffer));
+            printf("%d : %s\n", (int)getpid(), buffer);
 
             if (strncmp(buffer, "shop list", 9) == 0) {
                 send(client_sockfd, "Dessert shop:3km\n- cookie:$60|cake:$80\nBeverage shop:5km\n- tea:$40|boba:$70\nDiner:8km\n- fried-rice:$120|Egg-drop-soup:$50\n", 256, 0);
@@ -276,11 +277,12 @@ void handleClient(void* arg){
                     
                     //
                     bool return_flag = false;
-
-                    /* lock mutex */
-                    rc = pthread_mutex_lock(&mutex);
+                    P(s);
+                    // /* lock mutex */
+                    // rc = pthread_mutex_lock(&mutex);
                     int shortest_time;
-                    shortest_time = delivery_shm[0] < delivery_shm[1] ? delivery_shm[0]:delivery_shm[1];
+                    shortest_time = delivery_shm[0] <= delivery_shm[1] ? delivery_shm[0]:delivery_shm[1];
+                    shortest_time = shortest_time + distance;
                     if(shortest_time>30){
                         return_flag =  true;
                     }
@@ -291,21 +293,23 @@ void handleClient(void* arg){
 
                     //
 
-                    if(check_wating_time()){
+                    if(return_flag){
                         snprintf(response, sizeof(response), "Your delivery will take a long time, do you want to wait?");
                         send(client_sockfd, response, 256, 0);
 
                         read(client_sockfd, buffer, sizeof(buffer));
+                        printf("%d :%s\n", (int)getpid(), buffer);
                         if (strncmp(buffer, "No", 2) == 0) {
                             reset_order();
-                            /* unlock mutex */
-                            rc = pthread_mutex_unlock(&mutex);
+                            // /* unlock mutex */
+                            // rc = pthread_mutex_unlock(&mutex);
+                            V(s);
                             break; 
                         }
                         
                     }
-                    /* unlock mutex */
-                    rc = pthread_mutex_unlock(&mutex);
+                    // /* unlock mutex */
+                    // rc = pthread_mutex_unlock(&mutex);
                     /*-------------------*/
 
                     snprintf(response, sizeof(response), "Please wait a few minutes...");
@@ -313,7 +317,7 @@ void handleClient(void* arg){
                     
                     int sleep_time = 0;
                     sleep_time = schedule_and_wait(distance);
-
+                    V(s);
                     sleep(sleep_time);
 
                     
@@ -321,12 +325,12 @@ void handleClient(void* arg){
                     send(client_sockfd, response, 256, 0);
 
 
-                    // /* lock mutex */
-                    // rc = pthread_mutex_lock(&mutex);
+                    /* lock mutex */
+                    rc = pthread_mutex_lock(&mutex);
                     result_shm[0].amount++;
                     result_shm[1].amount = result_shm[1].amount + total_price;
-                    // /* unlock mutex */
-                    // rc = pthread_mutex_unlock(&mutex);
+                    /* unlock mutex */
+                    rc = pthread_mutex_unlock(&mutex);
                     
 
                     reset_order();
@@ -352,16 +356,20 @@ void handleClient(void* arg){
 
 }
 
+
 // get the shop name of product
 const char *get_shop_name(const char *item_name) {
     if (strcmp(item_name, "cookie") == 0 || strcmp(item_name, "cake") == 0) {
-        distance = 3;
+        if (first_order) 
+            distance = 3;
         return "Dessert shop";
     } else if (strcmp(item_name, "tea") == 0 || strcmp(item_name, "boba") == 0) {
-        distance = 5;
+        if (first_order) 
+            distance = 5;
         return "Beverage shop";
     } else if (strcmp(item_name, "fried-rice") == 0 || strcmp(item_name, "Egg-drop-soup") == 0) {
-        distance = 8;
+        if (first_order) 
+            distance = 8;
         return "Diner";
     } else {
         return "Unknown";
@@ -458,6 +466,7 @@ void reset_order(){
     total_egg_drop_soup = 0;
     total_price = 0;
     distance = 0;
+    first_order = true;
 
 }
 
@@ -600,41 +609,42 @@ void counting_time_CS(){
 }
 
 // return true for both time > 30s
-bool check_wating_time(){
+// bool check_wating_time(){
 
-    bool return_flag = false;
+//     bool return_flag = false;
 
-    // /*critical section*/
-    // P(s);
-    // int shortest_time;
-    // shortest_time = delivery_shm[0] < delivery_shm[1] ? delivery_shm[0]:delivery_shm[1];
-    // if(shortest_time>30){
-    //     return_flag =  true;
-    // }
-    // else{
-    //     return_flag =  false;
-    // }
-    // V(s);
-    // /*-------------------*/
+//     // /*critical section*/
+//     // P(s);
+//     // int shortest_time;
+//     // shortest_time = delivery_shm[0] < delivery_shm[1] ? delivery_shm[0]:delivery_shm[1];
+//     // if(shortest_time>30){
+//     //     return_flag =  true;
+//     // }
+//     // else{
+//     //     return_flag =  false;
+//     // }
+//     // V(s);
+//     // /*-------------------*/
 
-    int shortest_time;
-    shortest_time = delivery_shm[0] < delivery_shm[1] ? delivery_shm[0]:delivery_shm[1];
-    if(shortest_time>30){
-        return_flag =  true;
-    }
-    else{
-        return_flag =  false;
-    }
+//     int shortest_time;
+//     shortest_time = delivery_shm[0] < delivery_shm[1] ? delivery_shm[0]:delivery_shm[1];
+//     shortest_time = shortest_time + distance;
+//     if(shortest_time>30){
+//         return_flag =  true;
+//     }
+//     else{
+//         return_flag =  false;
+//     }
 
-    return return_flag;
+//     return return_flag;
 
-}
+// }
 
 int schedule_and_wait(int dis){
-
+    printf("%d plus %d time\n", (int)getpid(), dis);
     int return_time = 0;
     /*critical section*/
-    P(s);
+    // P(s);
     if(delivery_shm[0] < delivery_shm[1]){
         delivery_shm[0] = delivery_shm[0] + dis;
         return_time = delivery_shm[0];
@@ -642,7 +652,7 @@ int schedule_and_wait(int dis){
         delivery_shm[1] = delivery_shm[1] + dis;
         return_time = delivery_shm[1];
     }
-    V(s);
+    // V(s);
     /*-------------------*/
 
     return return_time;
