@@ -101,6 +101,9 @@ int main(int argc, char *argv[]) {
             else if (retval < 0) /* error */
                 perror("pipe read()");
             else { /* write fd closed */
+                /*當 read 函數返回值為 0 時，表示管道的寫入端已經被關閉。這種情況通常發生在子進程執行 close(pfd[1]); 
+                之後，父進程在讀取該管道時會得到一個返回值為 0 的結果，這表示寫入端已經被成功關閉。*/
+
                 /* close read fd */
                 close(fd_index);
                 /* remove fd from the watch list */
