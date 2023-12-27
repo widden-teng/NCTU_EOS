@@ -13,7 +13,7 @@
 #include <pthread.h>
 
 
-/*share memory*/
+/* define share memory */
 struct total_result {
     int amount;
     char heading[10];
@@ -29,7 +29,7 @@ int *delivery_shm;
 
 /*-------------------*/
 
-/*Semaphore*/ 
+/* define Semaphore */ 
 #define SEM_MODE 0666 /* rw(owner)-rw(group)-rw(other) permission */
 #define MAX_BUFFER_SIZE 256
 #define SEM_KEY 428361733 /* any long int */
@@ -73,7 +73,6 @@ int P(int s);
 int V(int s);
 void counting_time_CS();
 int schedule_and_wait(int dis);
-// bool check_wating_time();
 /*-------------------*/
 
 int main(int argc, char *argv[]) {
@@ -99,7 +98,7 @@ int main(int argc, char *argv[]) {
                 SEM_KEY, strerror(errno));
         exit(1);
     }
-    printf("Semaphore %d created\n", SEM_KEY);
+    // printf("Semaphore %d created\n", SEM_KEY);
 
     /* set semaphore (s[0]) value to initial value (val) */
     if (semctl(s, 0, SETVAL, SEM_VAL) < 0)
@@ -109,7 +108,7 @@ int main(int argc, char *argv[]) {
                 strerror(errno));
         exit(0);
     }
-    printf("Semaphore %d has been initialized to %d\n", SEM_KEY, SEM_VAL);
+    // printf("Semaphore %d has been initialized to %d\n", SEM_KEY, SEM_VAL);
    
     /*-------------------------------------------------*/
 
@@ -146,8 +145,6 @@ int main(int argc, char *argv[]) {
     result_shm[0].amount = 0;
     strcpy(result_shm[1].heading, "income");
     result_shm[1].amount = 0;
-
-    
 
     /*-------------------------------------------------*/ 
 
@@ -196,10 +193,10 @@ int main(int argc, char *argv[]) {
                 perror("Listen failed");
                 exit(EXIT_FAILURE);
             }
-
-            printf("Server listening on port %d...\n", port);
+            // printf("Server listening on port %d...\n", port);
             /*-------------------------------------------------*/
 
+            // 一直處在可以接收連線的狀態(有新的連線就會fork)
             while (1) {
                 // 接受新的連接
                 if ((client_socket = accept(server_fd, (struct sockaddr *)&client_addr, (socklen_t*)&addrlen)) < 0) {
@@ -207,7 +204,7 @@ int main(int argc, char *argv[]) {
                     exit(EXIT_FAILURE);
                 }
 
-                printf("Client connected\n");
+                // printf("Client connected\n");
 
                 handleClient(&client_socket);
             }
@@ -217,7 +214,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    // 因為while(1)過不來
+    // 因為while(1)過不來, 下面不會跑到, 所以改成用signal handler
     // // 關閉伺服器端 socket
     // close(server_fd);
     // printf("Server closed\n");
@@ -239,7 +236,7 @@ void handleClient(void* arg){
         {
             memset(response, 0, sizeof(response));
             read(client_sockfd, buffer, sizeof(buffer));
-            printf("%d : %s\n", (int)getpid(), buffer);
+            // printf("%d : %s\n", (int)getpid(), buffer);
 
             if (strncmp(buffer, "shop list", 9) == 0) {
                 send(client_sockfd, "Dessert shop:3km\n- cookie:$60|cake:$80\nBeverage shop:5km\n- tea:$40|boba:$70\nDiner:8km\n- fried-rice:$120|Egg-drop-soup:$50\n", 256, 0);
@@ -274,12 +271,10 @@ void handleClient(void* arg){
                     send(client_sockfd, response, 256, 0);
                 }
                 else{
-                    
-                    //
                     bool return_flag = false;
+                    /*critical section*/
                     P(s);
-                    // /* lock mutex */
-                    // rc = pthread_mutex_lock(&mutex);
+                    // 判斷哪個運送員時間最短與是否>30S
                     int shortest_time;
                     shortest_time = delivery_shm[0] <= delivery_shm[1] ? delivery_shm[0]:delivery_shm[1];
                     shortest_time = shortest_time + distance;
@@ -290,27 +285,20 @@ void handleClient(void* arg){
                         return_flag =  false;
                     }
                     
-
-                    //
-
+                    // 最短運送員超過30秒
                     if(return_flag){
                         snprintf(response, sizeof(response), "Your delivery will take a long time, do you want to wait?");
                         send(client_sockfd, response, 256, 0);
 
                         read(client_sockfd, buffer, sizeof(buffer));
-                        printf("%d :%s\n", (int)getpid(), buffer);
+                        // printf("%d :%s\n", (int)getpid(), buffer);
                         if (strncmp(buffer, "No", 2) == 0) {
                             reset_order();
-                            // /* unlock mutex */
-                            // rc = pthread_mutex_unlock(&mutex);
                             V(s);
                             break; 
                         }
                         
                     }
-                    // /* unlock mutex */
-                    // rc = pthread_mutex_unlock(&mutex);
-                    /*-------------------*/
 
                     snprintf(response, sizeof(response), "Please wait a few minutes...");
                     send(client_sockfd, response, 256, 0);
@@ -318,21 +306,21 @@ void handleClient(void* arg){
                     int sleep_time = 0;
                     sleep_time = schedule_and_wait(distance);
                     V(s);
-                    sleep(sleep_time);
+                    /*-------------------*/
 
-                    
+                    sleep(sleep_time);                    
                     snprintf(response, sizeof(response), "Delivery has arrived and you need to pay %d$", total_price);
                     send(client_sockfd, response, 256, 0);
 
-
                     /* lock mutex */
+                    // 用於統計總人數與金額(最後存入txt用)
                     rc = pthread_mutex_lock(&mutex);
                     result_shm[0].amount++;
                     result_shm[1].amount = result_shm[1].amount + total_price;
                     /* unlock mutex */
                     rc = pthread_mutex_unlock(&mutex);
+                    /*-------------------*/
                     
-
                     reset_order();
                     break;      
                 }
@@ -344,8 +332,6 @@ void handleClient(void* arg){
             }
             
         }
-
-
         // Close the socket for this client
         close(client_sockfd);
     }else {
@@ -355,7 +341,6 @@ void handleClient(void* arg){
     }
 
 }
-
 
 // get the shop name of product
 const char *get_shop_name(const char *item_name) {
@@ -408,7 +393,6 @@ void update_num_price(const char *item_name, const int quantity) {
 }
 
 char *show_current_order(){
-    
     char *order_history = (char *)malloc(MAX_BUFFER_SIZE );
 
     if (order_history == NULL) {
@@ -467,9 +451,9 @@ void reset_order(){
     total_price = 0;
     distance = 0;
     first_order = true;
-
 }
 
+// wait chuld process done
 void stop_child(int signum) {
     // waitpid 是為了等待並處理子進程的結束，以防止它們變成殭屍進程。
     while (waitpid(-1, NULL, WNOHANG) > 0);
@@ -480,8 +464,9 @@ void safe_close_routine(int signum) {
     
     close(server_fd);
 
-    
+    // semaphore只刪一次，txt只創建與寫入一次
     if(origin_parent == (int)getpid()){
+        
         /* remove semaphore */
        if (semctl(s, 0, IPC_RMID, 0) < 0)
         {
@@ -510,25 +495,23 @@ void safe_close_routine(int signum) {
 
         // 關閉檔案
         fclose(filePointer);
-
-        printf("檔案已成功創建或清空並寫入。\n");
+        // printf("檔案已成功創建或清空並寫入。\n");
         /*---------------------------------------*/
 
 
     }      
     
-
     /* destroy mutex */
     pthread_mutex_destroy(&mutex);
     /*---------------------------------*/ 
 
+    /* Remove share memory */ 
     /* Detach the shared memory segment of delivery and  result*/
     shmdt(delivery_shm);
     shmdt(result_shm); 
 
-
+    // share memory只要刪一次
     if(origin_parent == (int)getpid()){
-        /*remove share memory*/
         /*remove delivery shm*/
         int retval;
         retval = shmctl(delivery_shmid, IPC_RMID, NULL);
@@ -543,8 +526,8 @@ void safe_close_routine(int signum) {
             fprintf(stderr, "Server removes result shared memory failed\n");
             exit(1);
         }
-        /*------------------------------*/
     }
+    /*---------------------------------*/ 
 
     // 結束程式
     exit(signum);            
@@ -588,9 +571,8 @@ int V(int s)
     }
 }
 
+// 對兩個運送員計時
 void counting_time_CS(){
-
-    
     int i ;
     while(1){
         /*critical section*/
@@ -608,43 +590,10 @@ void counting_time_CS(){
 
 }
 
-// return true for both time > 30s
-// bool check_wating_time(){
-
-//     bool return_flag = false;
-
-//     // /*critical section*/
-//     // P(s);
-//     // int shortest_time;
-//     // shortest_time = delivery_shm[0] < delivery_shm[1] ? delivery_shm[0]:delivery_shm[1];
-//     // if(shortest_time>30){
-//     //     return_flag =  true;
-//     // }
-//     // else{
-//     //     return_flag =  false;
-//     // }
-//     // V(s);
-//     // /*-------------------*/
-
-//     int shortest_time;
-//     shortest_time = delivery_shm[0] < delivery_shm[1] ? delivery_shm[0]:delivery_shm[1];
-//     shortest_time = shortest_time + distance;
-//     if(shortest_time>30){
-//         return_flag =  true;
-//     }
-//     else{
-//         return_flag =  false;
-//     }
-
-//     return return_flag;
-
-// }
-
+// 判斷加在最短時間的運送員上
 int schedule_and_wait(int dis){
-    printf("%d plus %d time\n", (int)getpid(), dis);
     int return_time = 0;
-    /*critical section*/
-    // P(s);
+
     if(delivery_shm[0] < delivery_shm[1]){
         delivery_shm[0] = delivery_shm[0] + dis;
         return_time = delivery_shm[0];
@@ -652,8 +601,5 @@ int schedule_and_wait(int dis){
         delivery_shm[1] = delivery_shm[1] + dis;
         return_time = delivery_shm[1];
     }
-    // V(s);
-    /*-------------------*/
-
     return return_time;
 }
